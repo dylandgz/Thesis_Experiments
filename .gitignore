@@ -1,0 +1,51 @@
+# Ignore Python bytecode files
+*.py[cod]
+
+# Ignore `__pycache__` directories
+__pycache__/
+src/__pycache__/
+
+# Ignore virtual environment directories
+.venv/
+env/
+
+# Ignore Python egg files
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Ignore data directories
+data/
+Experiment_Trials/
+
+# Ignore log files
+*.log
+
+# Ignore database files
+*.sqlite3
+
+# Ignore IDE specific files
+.idea/
+.vscode/
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore OS specific files
+.DS_Store
+Thumbs.db
+
+# Ignore image files
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.svg
+*.ico
+*.webp
+*.heic
+
