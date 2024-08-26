@@ -71,6 +71,8 @@ class FeatureSelectPipeline:
 
         # Define the base directory for storing experiment results
         # Use the provided base directory or create a custom path if none is provided
+
+
         if base_dir is None:
             base_dir = '../Experiment_Trials/' + dataset_name  +'/' + name +'/' + pipeline_name
 
@@ -100,8 +102,6 @@ class FeatureSelectPipeline:
 
         self._init_pipelines(classifier_pool=classifier_pool)
 
-        print(self.pipelines)
-
         # Initialize a dictionary to store metrics for each pipeline, starting with empty lists
         self.prediction_metrics = {p: [] for p in self.pipelines}
 
@@ -111,7 +111,7 @@ class FeatureSelectPipeline:
         # Print the initialized dictionary of predictor imputer pipelines
         print("Predictor Imputer Pipelines(all pipeline runs once per fold):")
         for pipeline, evals in self.imputed_evals.items():
-            print(f"\t{pipeline}")
+            print(f"\t{pipeline}: {evals}")
 
     def _init_pipelines(self, classifier_pool=None):
         if classifier_pool is None:
@@ -130,15 +130,13 @@ class FeatureSelectPipeline:
             ]
             
 
-            # clf_imputer_pairs = product(models, imputers)
-            clf_imputer_pairs = product( imputers, models)
+            clf_imputer_pairs = product(models, imputers)
             pipelines_list = [
                 ClassifierWithImputation(
-                    
-                    imputer=imp,
-                    estimator=clf
+                    estimator=clf,
+                    imputer=imp
                 )
-                for  imp,clf in clf_imputer_pairs
+                for clf, imp in clf_imputer_pairs
             ]
 
 
@@ -154,14 +152,19 @@ class FeatureSelectPipeline:
 
             pipelines = {
 
-                # 'Estim(' + pipeline_names[p.estimator_name] + ')_Imputer(' + pipeline_names[p.imputer_name] + ')': p
-                'Imputer(' + pipeline_names[p.imputer_name] + ')_Estim(' + pipeline_names[p.estimator_name] + ')': p
+                'Estim(' + pipeline_names[p.estimator_name] + ')_Imputer(' + pipeline_names[p.imputer_name] + ')': p
                 for p in pipelines_list
             }
         else:
-            pipelines = classifier_pool   
+            pipelines = classifier_pool
+            
+                
 
         self.pipelines = pipelines
+        
+
+
+
 
         self.unfitted_pipelines = deepcopy(self.pipelines)
 
@@ -188,8 +191,17 @@ class FeatureSelectPipeline:
             print(f"Processing fold {fold + 1}/{self.dataset_object.n_folds}")
 
             self._init_pipelines()
+            # print("All data")
+            # print(self.dataset_object.raw_data.shape)
 
             train, val, test = self.dataset_object[fold]
+            # print("train")
+            # print(train.shape)
+            # print("val")
+            # print(val.shape)
+            # print("test")
+            # print(test.shape)
+
 
             y_test = test[self.dataset_object.target_col]
             y_trues += list(y_test)
@@ -202,6 +214,9 @@ class FeatureSelectPipeline:
             X_train = train.drop(self.dataset_object.target_col, axis=1)
             X_train = round(X_train, 8)
 
+
+             ##########################
+
             # Identify indices of rows with no missing values
             non_missing_indices = X_train.dropna().index
 
@@ -211,52 +226,56 @@ class FeatureSelectPipeline:
             # Filter y_train to keep only corresponding rows
             y_train_complete = y_train.loc[non_missing_indices]
 
-            ##########################
-            ##########################
-            # # INFORMATION GAIN FEATURE SELECTION
-            # X_train_complete_ig, selected_features_ig = self.select_features_ig(X_train_complete, y_train_complete, k=10)
+            # print("train_complete")
+            # print(X_train_complete.shape)
 
-            # # If X_train is a DataFrame and selected_features_ig is an array of column indices
-            # X_train_ig = X_train.iloc[:, selected_features_ig]
-            # X_test_ig = X_test.iloc[:, selected_features_ig]
-            # train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
+            # print("train_complete type")
+            # print(type(X_train_complete))
 
-            # # Filter self.train_not_missing to include only the selected features
-            # self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_ig]
-            # self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_ig]
+            X_train_complete_ig, selected_features_ig = self.select_features_ig(X_train_complete, y_train_complete, k=10)
 
-            # # X_val=X_val, y_val=y_val,
-            # errors_df, proba_predictions_df = self.do_experiment_one_fold(
-            #     X_train=X_train_ig, y_train=y_train,
-            #     X_val=X_val, y_val=y_val,
-            #     X_test=X_test_ig, y_test=y_test
-            # )
 
-            ##########################
-            ##########################
-            # CORRELATION COEFFICIENT FEATURE SELECTION
-            X_train_complete_corr, selected_features_corr = self.select_features_corr(X_train_complete, y_train_complete, k=10)
+            # If X_train is a DataFrame and selected_features_ig is an array of column indices
+            X_train_ig = X_train.iloc[:, selected_features_ig]
 
-            # If X_train is a DataFrame and selected_features_corr is an array of column indices
-            X_train_corr = X_train.loc[:, selected_features_corr]
-            X_test_corr = X_test.loc[:, selected_features_corr]
+            X_test_ig = X_test.iloc[:, selected_features_ig]
+            
+
+            # print("train")
+            # print(X_train_ig.shape)
+
+            # print("test")
+            # print(X_test_ig.shape)
+
+
+
+
+
             train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
 
+
+            # self.train_not_missing = original_data.iloc[train_indices]
+            # # self.val_not_missing = original_data.iloc[val_indices]
+            # self.test_not_missing = original_data.iloc[test_indices]
+
             # Filter self.train_not_missing to include only the selected features
-            self.train_not_missing = original_data.iloc[train_indices].loc[:, selected_features_corr]
-            self.test_not_missing = original_data.iloc[test_indices].loc[:, selected_features_corr]
+            self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_ig]
+
+            # If you want to also filter self.val_not_missing, uncomment the following line
+            # self.val_not_missing = original_data.iloc[val_indices].iloc[:, selected_features_ig]
+
+            # Filter self.test_not_missing to include only the selected features
+            self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_ig]
+
+            ##########################
+
 
             # X_val=X_val, y_val=y_val,
             errors_df, proba_predictions_df = self.do_experiment_one_fold(
-                X_train=X_train_corr, y_train=y_train,
+                X_train=X_train_ig, y_train=y_train,
                 X_val=X_val, y_val=y_val,
-                X_test=X_test_corr, y_test=y_test
+                X_test=X_test_ig, y_test=y_test
             )
-
-
-
-
-
 
             errors_dfs.append(errors_df)
             proba_predictions_dfs.append(proba_predictions_df)
@@ -289,6 +308,12 @@ class FeatureSelectPipeline:
             proba_predictions_per_pipeline[pipeline_type] = proba_predictions
             errors_df[pipeline_type] = errors
 
+            # # Will choose imputation method based on pipeline type
+            # self._mean_imputer(
+            #     X_train=X_train, y_train=y_train,
+            #     X_test=X_test, y_test=y_test
+            # )
+
         proba_predictions_per_pipeline_2d = {
             k: np.hstack([1 - np.ravel(probas).reshape(-1, 1), np.ravel(probas).reshape(-1, 1)])
             for k, probas in proba_predictions_per_pipeline.items()
@@ -297,6 +322,8 @@ class FeatureSelectPipeline:
 
         y_test_2d = np.array(self.label_enc.transform(y_test.reshape(-1, 1)).todense())
         errors = np.abs(y_test - proba_predictions)
+        # proba_predictions_per_pipeline['Uniform Model Averaging'] = proba_predictions
+        # errors_df['Uniform Model Averaging'] = errors
         predictions = np.round(proba_predictions)
         single_label_y_test = np.argmax(y_test_2d, axis=1)
         roc_auc = roc_auc_score(y_test, proba_predictions)
@@ -524,7 +551,7 @@ class FeatureSelectPipeline:
         X_new = ig_selector.fit_transform(X, y)
         return X_new, ig_selector.get_support(indices=True)
 
-    def select_features_corr(self, X, y, k=10):
+    def select_features_corr(X, y, k=10):
         corr = X.corrwith(y)
         top_features = corr.abs().sort_values(ascending=False).head(k).index
         return X[top_features], top_features
@@ -600,11 +627,6 @@ class FeatureSelectPipeline:
         print(f'Accuracy: {accuracy}')
 
 
-
-
-
-
-        
 
 
 

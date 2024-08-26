@@ -64,28 +64,28 @@ def run_custom_experiments(original_data, dataset_name, missing_param_dict, targ
             )
 
             # ###################
-            # Running Baseline Pipeline
-            print("Running Baseline Pipeline")
-            baseline_pipeline_experiment = BaselinePipeline(dataset_object=dataset_object, dataset_name=dataset_name, missing_mechanism=params['missing_mechanism'], name=name)
-            baseline_metrics_df, baseline_errors_df, baseline_preds_df, baseline_imputation_eval_df = baseline_pipeline_experiment.run()
+            # # Running Baseline Pipeline
+            # print("Running Baseline Pipeline")
+            # baseline_pipeline_experiment = BaselinePipeline(dataset_object=dataset_object, dataset_name=dataset_name, missing_mechanism=params['missing_mechanism'], name=name)
+            # baseline_metrics_df, baseline_errors_df, baseline_preds_df, baseline_imputation_eval_df = baseline_pipeline_experiment.run()
             
-            filename = 'combined-missing_param_' + str(i) + '.csv'
+            # filename = 'combined-missing_param_' + str(i) + '.csv'
             
-            errors_filename = os.path.join(baseline_pipeline_experiment.results_dir, 'errors_' + filename)
+            # errors_filename = os.path.join(baseline_pipeline_experiment.results_dir, 'errors_' + filename)
             
-            baseline_errors_df.to_csv(errors_filename)
+            # baseline_errors_df.to_csv(errors_filename)
             
-            baseline_metrics_dfs.append(baseline_metrics_df)
-            metrics_filename = os.path.join(baseline_pipeline_experiment.results_dir, 'prediction_metrics_' + filename)
-            baseline_metrics_df.to_csv(metrics_filename)
+            # baseline_metrics_dfs.append(baseline_metrics_df)
+            # metrics_filename = os.path.join(baseline_pipeline_experiment.results_dir, 'prediction_metrics_' + filename)
+            # baseline_metrics_df.to_csv(metrics_filename)
 
-            baseline_imputation_eval_results.append(baseline_imputation_eval_df)
-            imputation_eval_filename = os.path.join(baseline_pipeline_experiment.results_dir, 'imputation_eval_' + filename)
-            # baseline_imputation_eval_df = baseline_imputation_eval_df.T
-            baseline_imputation_eval_df.to_csv(imputation_eval_filename)
+            # baseline_imputation_eval_results.append(baseline_imputation_eval_df)
+            # imputation_eval_filename = os.path.join(baseline_pipeline_experiment.results_dir, 'imputation_eval_' + filename)
+            # # baseline_imputation_eval_df = baseline_imputation_eval_df.T
+            # baseline_imputation_eval_df.to_csv(imputation_eval_filename)
 
-            preds_filename = os.path.join(baseline_pipeline_experiment.results_dir, 'predictions_' + filename)
-            baseline_preds_df.to_csv(preds_filename)
+            # preds_filename = os.path.join(baseline_pipeline_experiment.results_dir, 'predictions_' + filename)
+            # baseline_preds_df.to_csv(preds_filename)
 
             ###################
 
@@ -94,6 +94,12 @@ def run_custom_experiments(original_data, dataset_name, missing_param_dict, targ
             fs_pipeline_experiment = FeatureSelectPipeline(dataset_object=dataset_object, dataset_name=dataset_name, missing_mechanism=params['missing_mechanism'], name=name)
             fs_metrics_df, fs_errors_df, fs_preds_df, fs_imputation_eval_df = fs_pipeline_experiment.run()
 
+            
+
+
+
+
+            
             filename = 'combined-missing_param_' + str(i) + '.csv'
             
             errors_filename = os.path.join(fs_pipeline_experiment.results_dir, 'errors_' + filename)
@@ -106,7 +112,6 @@ def run_custom_experiments(original_data, dataset_name, missing_param_dict, targ
 
             fs_imputation_eval_results.append(fs_imputation_eval_df)
             imputation_eval_filename = os.path.join(fs_pipeline_experiment.results_dir, 'imputation_eval_' + filename)
-            # baseline_imputation_eval_df = baseline_imputation_eval_df.T
             fs_imputation_eval_df.to_csv(imputation_eval_filename)
 
             preds_filename = os.path.join(fs_pipeline_experiment.results_dir, 'predictions_' + filename)
@@ -121,18 +126,18 @@ def run_custom_experiments(original_data, dataset_name, missing_param_dict, targ
 
     print("Combining and saving final results")
 
-    final_results = pd.concat(baseline_metrics_dfs)
-    final_results.to_csv(os.path.join(baseline_pipeline_experiment.base_dir, 'prediction_metrics_final_results.csv'))
+    # final_results = pd.concat(baseline_metrics_dfs)
+    # final_results.to_csv(os.path.join(baseline_pipeline_experiment.base_dir, 'prediction_metrics_final_results.csv'))
 
-    combined_folds_imputation_eval_results_df = pd.concat(baseline_imputation_eval_results)
-    # combined_folds_imputation_eval_results_df = combined_folds_imputation_eval_results_df.T
-    combined_folds_imputation_eval_results_df.to_csv(os.path.join(baseline_pipeline_experiment.base_dir, 'imputation_eval_final_results.csv'))
+    # combined_folds_imputation_eval_results_df = pd.concat(baseline_imputation_eval_results)
+    # # combined_folds_imputation_eval_results_df = combined_folds_imputation_eval_results_df.T
+    # combined_folds_imputation_eval_results_df.to_csv(os.path.join(baseline_pipeline_experiment.base_dir, 'imputation_eval_final_results.csv'))
 
-    param_lookup_dict_json = json.dumps(param_lookup_dict)
-    with open(os.path.join(baseline_pipeline_experiment.base_dir, 'params_lookup.json'), 'w') as f:
-        f.write(param_lookup_dict_json)
+    # param_lookup_dict_json = json.dumps(param_lookup_dict)
+    # with open(os.path.join(baseline_pipeline_experiment.base_dir, 'params_lookup.json'), 'w') as f:
+    #     f.write(param_lookup_dict_json)
 
-    print(baseline_pipeline_experiment.base_dir)
+    # print(baseline_pipeline_experiment.base_dir)
 
     #######################################
 
