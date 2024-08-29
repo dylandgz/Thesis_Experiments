@@ -50,11 +50,13 @@ class FeatureSelectPipeline:
         name='Experiment_' + str(datetime.now()),
         base_dir=None,
         classifier_pool=None,
-        random_state=42
+        random_state=42,
+        fs_type='correlation_coefficient'
     ):
         self.dataset_object = dataset_object
         self.p_miss = self.dataset_object.p_miss
         self.n_folds = self.dataset_object.n_folds
+        self.fs_type = fs_type
         
         # Initialize a OneHotEncoder for label encoding the target column
         self.label_enc = OneHotEncoder()
@@ -100,7 +102,7 @@ class FeatureSelectPipeline:
 
         self._init_pipelines(classifier_pool=classifier_pool)
 
-        print(self.pipelines)
+        # print(self.pipelines)
 
         # Initialize a dictionary to store metrics for each pipeline, starting with empty lists
         self.prediction_metrics = {p: [] for p in self.pipelines}
@@ -128,6 +130,7 @@ class FeatureSelectPipeline:
                 SimpleImputer(strategy='mean'),
                 IterativeImputer(RandomForestRegressor(**rf_params))
             ]
+
             
 
             # clf_imputer_pairs = product(models, imputers)
@@ -165,7 +168,7 @@ class FeatureSelectPipeline:
 
         self.unfitted_pipelines = deepcopy(self.pipelines)
 
-    def do_kfold_experiments(self):
+    def do_kfold_experiments(self, fs_type):
         y_trues = []
         errors_dfs = []
         proba_predictions_dfs = []
@@ -182,7 +185,7 @@ class FeatureSelectPipeline:
         original_data = scaler.fit_transform(X)
         original_data = pd.DataFrame(original_data, columns=X_cols, index=X_index)
 
-        print(f"\n-----------------------------  Starting k-fold experiments for {self.dataset_name} -----------------------------\n")
+        print(f"\n+++++++++++++++ FEATURE SELECTION Starting k-fold experiments for {self.dataset_name} +++++++++++++++\n")
 
         for fold in range(self.n_folds):
             print(f"Processing fold {fold + 1}/{self.dataset_object.n_folds}")
@@ -211,47 +214,80 @@ class FeatureSelectPipeline:
             # Filter y_train to keep only corresponding rows
             y_train_complete = y_train.loc[non_missing_indices]
 
+
+            
+
+
+            if fs_type == "information_gain":
+                print("Information Gain Feature Selection")
+
+                #########################
+                #########################
+                # INFORMATION GAIN FEATURE SELECTION
+                X_train_complete_ig, selected_features_ig = self.select_features_ig(X_train_complete, y_train_complete, k=10)
+
+                # If X_train is a DataFrame and selected_features_ig is an array of column indices
+                X_train_ig = X_train.iloc[:, selected_features_ig]
+                X_test_ig = X_test.iloc[:, selected_features_ig]
+                train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
+
+                # Filter self.train_not_missing to include only the selected features
+                self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_ig]
+                self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_ig]
+
+                # X_val=X_val, y_val=y_val,
+                errors_df, proba_predictions_df = self.do_experiment_one_fold(
+                    X_train=X_train_ig, y_train=y_train,
+                    X_val=X_val, y_val=y_val,
+                    X_test=X_test_ig, y_test=y_test
+                )
+
             ##########################
             ##########################
-            # # INFORMATION GAIN FEATURE SELECTION
-            # X_train_complete_ig, selected_features_ig = self.select_features_ig(X_train_complete, y_train_complete, k=10)
+            elif fs_type == "chi_square":
+                print("Chi Square Feature Selection")
+                
+                
+                X_train_complete_chi, selected_features_chi = self.select_features_chi2(X_train_complete, y_train_complete, k=10)
 
-            # # If X_train is a DataFrame and selected_features_ig is an array of column indices
-            # X_train_ig = X_train.iloc[:, selected_features_ig]
-            # X_test_ig = X_test.iloc[:, selected_features_ig]
-            # train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
+                # If X_train is a DataFrame and selected_features_chi is an array of column indices
+                X_train_chi = X_train.iloc[:, selected_features_chi]
+                X_test_chi = X_test.iloc[:, selected_features_chi]
+                train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
 
-            # # Filter self.train_not_missing to include only the selected features
-            # self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_ig]
-            # self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_ig]
+                # Filter self.train_not_missing to include only the selected features
+                self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_chi]
+                self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_chi]
 
-            # # X_val=X_val, y_val=y_val,
-            # errors_df, proba_predictions_df = self.do_experiment_one_fold(
-            #     X_train=X_train_ig, y_train=y_train,
-            #     X_val=X_val, y_val=y_val,
-            #     X_test=X_test_ig, y_test=y_test
-            # )
+                # X_val=X_val, y_val=y_val,
+                errors_df, proba_predictions_df = self.do_experiment_one_fold(
+                    X_train=X_train_chi, y_train=y_train,
+                    X_val=X_val, y_val=y_val,
+                    X_test=X_test_chi, y_test=y_test
+                )
 
-            ##########################
-            ##########################
-            # CORRELATION COEFFICIENT FEATURE SELECTION
-            X_train_complete_corr, selected_features_corr = self.select_features_corr(X_train_complete, y_train_complete, k=10)
 
-            # If X_train is a DataFrame and selected_features_corr is an array of column indices
-            X_train_corr = X_train.loc[:, selected_features_corr]
-            X_test_corr = X_test.loc[:, selected_features_corr]
-            train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
+            else:
+                # CORRELATION COEFFICIENT FEATURE SELECTION
+                print("Correlation Coefficient Feature Selection")
+                X_train_complete_corr, selected_features_corr = self.select_features_corr(X_train_complete, y_train_complete, k=10)
 
-            # Filter self.train_not_missing to include only the selected features
-            self.train_not_missing = original_data.iloc[train_indices].loc[:, selected_features_corr]
-            self.test_not_missing = original_data.iloc[test_indices].loc[:, selected_features_corr]
+                # If X_train is a DataFrame and selected_features_corr is an array of column indices
+                X_train_corr = X_train.loc[:, selected_features_corr]
+                X_test_corr = X_test.loc[:, selected_features_corr]
+                train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
 
-            # X_val=X_val, y_val=y_val,
-            errors_df, proba_predictions_df = self.do_experiment_one_fold(
-                X_train=X_train_corr, y_train=y_train,
-                X_val=X_val, y_val=y_val,
-                X_test=X_test_corr, y_test=y_test
-            )
+                # Filter self.train_not_missing to include only the selected features
+                self.train_not_missing = original_data.iloc[train_indices].loc[:, selected_features_corr]
+                self.test_not_missing = original_data.iloc[test_indices].loc[:, selected_features_corr]
+
+                # X_val=X_val, y_val=y_val,
+                errors_df, proba_predictions_df = self.do_experiment_one_fold(
+                    X_train=X_train_corr, y_train=y_train,
+                    X_val=X_val, y_val=y_val,
+                    X_test=X_test_corr, y_test=y_test
+                )
+
 
 
 
@@ -264,7 +300,9 @@ class FeatureSelectPipeline:
         self.errors_df_total = pd.concat(errors_dfs)
         self.proba_predictions_df_total = pd.concat(proba_predictions_dfs)
 
-        print("\n-----------------------------  Completed k-fold experiments  -----------------------------")
+        print("\n+++++++++++++++ FEATURE SELECTION Completed k-fold experiments  +++++++++++++++")
+
+        # self.errors_df_total, self.proba_predictions_df_total
         
 
     def do_experiment_one_fold(self, X_train, y_train, X_val, y_val, X_test, y_test):
@@ -441,13 +479,25 @@ class FeatureSelectPipeline:
         self.imputed_evals[column_name].append(imputed_evals)
 
     def run(self):
-        self.do_kfold_experiments()
+        self.do_kfold_experiments(self.fs_type)
 
         prediction_metrics_df = pd.DataFrame({})
         imputed_evals_df= pd.DataFrame({})
 
+        # prediction_metrics_filename_df = {}
+        # imputed_evals_filename_df={}
+
+
+
+
+
         for m in self.prediction_metrics:
+            # print("-----------------THIS IS M-----------------")
+            # print(m)
             prediction_metrics_df[m] = np.mean(self.prediction_metrics[m], axis=0)
+            # print("-----------------THIS IS dataframe-----------------")
+            # print(type(prediction_metrics_df))
+            # print(prediction_metrics_df[m])
 
         prediction_metrics_df.index = self.metric_name_cols
 
@@ -519,6 +569,18 @@ class FeatureSelectPipeline:
         imputation_df.to_csv(os.path.join(self.results_dir, 'imputation_evaluation.csv'), index=False)
         classification_df.to_csv(os.path.join(self.results_dir, 'classification_evaluation.csv'), index=False)
 
+
+
+
+
+
+
+
+
+
+
+         
+
     def select_features_ig(self, X, y, k=10):
         ig_selector = SelectKBest(mutual_info_classif, k=k)
         X_new = ig_selector.fit_transform(X, y)
@@ -529,14 +591,14 @@ class FeatureSelectPipeline:
         top_features = corr.abs().sort_values(ascending=False).head(k).index
         return X[top_features], top_features
 
-    def select_features_chi2(X, y, k=10):
+    def select_features_chi2(self, X, y, k=10):
         chi2_selector = SelectKBest(chi2, k=k)
         X_new = chi2_selector.fit_transform(X, y)
         return X_new, chi2_selector.get_support(indices=True)
     
 
 
-    def genetic_algorithm_feature_selection(X, y, k=10, n_gen=20, pop_size=50):
+    def genetic_algorithm_feature_selection(self, X, y, k=10, n_gen=20, pop_size=50):
         def evaluate(individual):
             selected_features = [idx for idx, val in enumerate(individual) if val == 1]
             if len(selected_features) == 0:
@@ -570,13 +632,13 @@ class FeatureSelectPipeline:
 
 
 
-    def select_features_rfe(X, y, k=10):
+    def select_features_rfe(self, X, y, k=10):
         model = LogisticRegression(solver='liblinear')
         rfe = RFE(model, n_features_to_select=k)
         X_new = rfe.fit_transform(X, y)
         return X_new, rfe.get_support(indices=True)
     
-    def train_lightgbm(X_train, y_train, X_test, y_test):
+    def train_lightgbm(self, X_train, y_train, X_test, y_test):
         lgb_train = lgb.Dataset(X_train, y_train)
         lgb_test = lgb.Dataset(X_test, y_test, reference=lgb_train)
 

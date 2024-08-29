@@ -170,7 +170,7 @@ class BaselinePipeline:
         original_data = scaler.fit_transform(X)
         original_data = pd.DataFrame(original_data, columns=X_cols, index=X_index)
 
-        print(f"\n-----------------------------  Starting k-fold experiments for {self.dataset_name} -----------------------------\n")
+        print(f"\n+++++++++++++++ BASELINE Starting k-fold experiments for {self.dataset_name} +++++++++++++++\n")
 
         for fold in range(self.n_folds):
             print(f"Processing fold {fold + 1}/{self.dataset_object.n_folds}")
@@ -206,7 +206,7 @@ class BaselinePipeline:
         self.errors_df_total = pd.concat(errors_dfs)
         self.proba_predictions_df_total = pd.concat(proba_predictions_dfs)
 
-        print("\n-----------------------------  Completed k-fold experiments  -----------------------------")
+        print("\n+++++++++++++++ BASELINE Completed k-fold experiments  +++++++++++++++")
         
 
     def do_experiment_one_fold(self, X_train, y_train, X_val, y_val, X_test, y_test):
