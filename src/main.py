@@ -75,15 +75,15 @@ def run_custom_experiments(original_data, dataset_name, missing_param_dict, targ
             )
 
             ##################
-            # baseline_metrics_dfs, baseline_imputation_eval_results,baseline_pipeline_experiment = baseline_experiment(
-            #     dataset_object=dataset_object,
-            #     dataset_name=dataset_name,
-            #     params=params,
-            #     name=name,
-            #     i=i,
-            #     baseline_metrics_dfs=baseline_metrics_dfs,
-            #     baseline_imputation_eval_results=baseline_imputation_eval_results
-            # ) 
+            baseline_metrics_dfs, baseline_imputation_eval_results,baseline_pipeline_experiment = baseline_experiment(
+                dataset_object=dataset_object,
+                dataset_name=dataset_name,
+                params=params,
+                name=name,
+                i=i,
+                baseline_metrics_dfs=baseline_metrics_dfs,
+                baseline_imputation_eval_results=baseline_imputation_eval_results
+            ) 
 
             # I think ths is trash, to be deleted
             # fs_metrics_dfs, fs_imputation_eval_results, fs_pipeline_experiment = feature_selection_experiment(
@@ -105,13 +105,13 @@ def run_custom_experiments(original_data, dataset_name, missing_param_dict, targ
             pbar.update(1)
 
     print("Combining and saving final results")
-    ###############################
-    # save_baseline_experiment_results(
-    #     baseline_metrics_dfs=baseline_metrics_dfs,
-    #     baseline_imputation_eval_results=baseline_imputation_eval_results,
-    #     baseline_pipeline_experiment=baseline_pipeline_experiment,
-    #     param_lookup_dict=param_lookup_dict
-    # )
+    ##############################
+    save_baseline_experiment_results(
+        baseline_metrics_dfs=baseline_metrics_dfs,
+        baseline_imputation_eval_results=baseline_imputation_eval_results,
+        baseline_pipeline_experiment=baseline_pipeline_experiment,
+        param_lookup_dict=param_lookup_dict
+    )
     for fs in fs_methods:
         single_fs_metrics_dfs=fs_metrics_type_dfs[fs]
         single_fs_imputation_eval_results=fs_imputation_type_results[fs]
@@ -240,10 +240,10 @@ def save_feature_selection_experiment_results(fs_metrics_dfs, fs_imputation_eval
 
 
 CURRENT_SUPPORTED_DATALOADERS = {
-    # 'eeg_eye_state': DataLoadersEnum.prepare_eeg_eye_data,
-    'Cleveland Heart Disease': DataLoadersEnum.prepare_cleveland_heart_data,
-    'diabetic_retinopathy': DataLoadersEnum.prepare_diabetic_retinopathy_dataset,
-    'wdbc': DataLoadersEnum.prepare_wdbc_data
+    # # 'eeg_eye_state': DataLoadersEnum.prepare_eeg_eye_data,
+    # 'Cleveland Heart Disease': DataLoadersEnum.prepare_cleveland_heart_data,
+    'diabetic_retinopathy': DataLoadersEnum.prepare_diabetic_retinopathy_dataset
+    # 'wdbc': DataLoadersEnum.prepare_wdbc_data
    
 }
 
@@ -251,7 +251,7 @@ CURRENT_SUPPORTED_DATALOADERS = {
 def run(custom_experiment_data_object, task_type='classification'):
     MCAR_PARAM_DICT = {
         # 'p_miss': [x/10 for x in range(3,9)], 
-        'p_miss': [0.1],
+        'p_miss': [0.1, 0.2, 0.3, 0.4, 0.5],
         'missing_mechanism': ["MCAR"],
         'opt': [None],
         'p_obs': [None],
@@ -261,7 +261,7 @@ def run(custom_experiment_data_object, task_type='classification'):
     MAR_PARAM_DICT = {
         # 'p_miss': [x/10 for x in range(3,9)], 
         # 0.1, 0.2, 0.3,
-        'p_miss': [0.1],
+        'p_miss': [0.1, 0.2, 0.3, 0.4, 0.5],
         'missing_mechanism': ["MAR"],
         'opt': [None],
         'p_obs': [0.3],
@@ -269,7 +269,7 @@ def run(custom_experiment_data_object, task_type='classification'):
     }
 
     MNAR_PARAM_DICT = {
-        'p_miss': [0.1],
+        'p_miss': [0.1, 0.2, 0.3, 0.4, 0.5],
         'missing_mechanism': ["MNAR"],
         'opt': ['logistic'],
         'p_obs': [0.3],
@@ -290,7 +290,7 @@ def run(custom_experiment_data_object, task_type='classification'):
 # Driver Function
 def main():
     
-    total_trials = 1
+    total_trials = 10
     for i in range(0, total_trials):
         for dataset_name, data_preparation_function_object in CURRENT_SUPPORTED_DATALOADERS.items():
             print(f"\nTrial: {i+1}/{total_trials} for Dataset: {dataset_name}")

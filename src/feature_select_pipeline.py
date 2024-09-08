@@ -41,8 +41,8 @@ from sklearn_genetic import GAFeatureSelectionCV
 
 #genetic algorithm
 import matplotlib.pyplot as plt
-from sklearn_genetic import GAFeatureSelectionCV
-from sklearn_genetic.plots import plot_fitness_evolution
+from sklearn_genetic.genetic_search import GAFeatureSelectionCV
+# from sklearn_genetic.plots import plot_fitness_evolution
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from sklearn.datasets import load_iris
