@@ -16,7 +16,6 @@ dist/
 build/
 
 # Ignore data directories
-data/
 Experiment_Trials/
 
 # Ignore log files
