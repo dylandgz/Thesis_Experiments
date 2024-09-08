@@ -93,10 +93,10 @@ class BaselinePipeline:
         # Initialize a dictionary to store imputed evaluations for each pipeline, starting with empty lists
         self.imputed_evals = {p: [] for p in self.pipelines}
 
-        # Print the initialized dictionary of predictor imputer pipelines
-        print("Predictor Imputer Pipelines(all pipeline runs once per fold):")
-        for pipeline, evals in self.imputed_evals.items():
-            print(f"\t{pipeline}: {evals}")
+        # # Print the initialized dictionary of predictor imputer pipelines
+        # print("Predictor Imputer Pipelines(all pipeline runs once per fold):")
+        # for pipeline, evals in self.imputed_evals.items():
+        #     print(f"\t{pipeline}: {evals}")
 
     def _init_pipelines(self, classifier_pool=None):
         if classifier_pool is None:
@@ -115,13 +115,14 @@ class BaselinePipeline:
             ]
             
 
-            clf_imputer_pairs = product(models, imputers)
+            clf_imputer_pairs = product(imputers,models)
             pipelines_list = [
                 ClassifierWithImputation(
-                    estimator=clf,
-                    imputer=imp
+                    
+                    imputer=imp,
+                    estimator=clf
                 )
-                for clf, imp in clf_imputer_pairs
+                for  imp,clf in clf_imputer_pairs
             ]
 
 
@@ -137,7 +138,8 @@ class BaselinePipeline:
 
             pipelines = {
 
-                'Estim(' + pipeline_names[p.estimator_name] + ')_Imputer(' + pipeline_names[p.imputer_name] + ')': p
+                # 'Estim(' + pipeline_names[p.estimator_name] + ')_Imputer(' + pipeline_names[p.imputer_name] + ')': p
+                'Imputer(' + pipeline_names[p.imputer_name] + ')_Estim(' + pipeline_names[p.estimator_name] + ')': p
                 for p in pipelines_list
             }
         else:
@@ -173,7 +175,8 @@ class BaselinePipeline:
         print(f"\n+++++++++++++++ BASELINE Starting k-fold experiments for {self.dataset_name} +++++++++++++++\n")
 
         for fold in range(self.n_folds):
-            print(f"Processing fold {fold + 1}/{self.dataset_object.n_folds}")
+
+            print(f"Processing fold {fold + 1}/{self.dataset_object.n_folds}", end='\r')
 
             self._init_pipelines()
             train, val, test = self.dataset_object[fold]
@@ -206,7 +209,6 @@ class BaselinePipeline:
         self.errors_df_total = pd.concat(errors_dfs)
         self.proba_predictions_df_total = pd.concat(proba_predictions_dfs)
 
-        print("\n+++++++++++++++ BASELINE Completed k-fold experiments  +++++++++++++++")
         
 
     def do_experiment_one_fold(self, X_train, y_train, X_val, y_val, X_test, y_test):

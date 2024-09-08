@@ -35,7 +35,19 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 import lightgbm as lgb
 from sklearn.metrics import accuracy_score
 from deap import base, creator, tools, algorithms  # For Genetic Algorithm
+from sklearn.model_selection import cross_val_score
 import random
+from sklearn_genetic import GAFeatureSelectionCV
+
+#genetic algorithm
+import matplotlib.pyplot as plt
+from sklearn_genetic import GAFeatureSelectionCV
+from sklearn_genetic.plots import plot_fitness_evolution
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
+from sklearn.datasets import load_iris
+from sklearn.metrics import accuracy_score
+import numpy as np
 
 
 
@@ -110,10 +122,10 @@ class FeatureSelectPipeline:
         # Initialize a dictionary to store imputed evaluations for each pipeline, starting with empty lists
         self.imputed_evals = {p: [] for p in self.pipelines}
 
-        # Print the initialized dictionary of predictor imputer pipelines
-        print("Predictor Imputer Pipelines(all pipeline runs once per fold):")
-        for pipeline, evals in self.imputed_evals.items():
-            print(f"\t{pipeline}")
+        # # Print the initialized dictionary of predictor imputer pipelines
+        # print("Predictor Imputer Pipelines(all pipeline runs once per fold):")
+        # for pipeline, evals in self.imputed_evals.items():
+        #     print(f"\t{pipeline}")
 
     def _init_pipelines(self, classifier_pool=None):
         if classifier_pool is None:
@@ -168,6 +180,70 @@ class FeatureSelectPipeline:
 
         self.unfitted_pipelines = deepcopy(self.pipelines)
 
+
+
+
+
+
+
+    def ensure_20_percent_non_missing(self,X_train, y_train, imputation_strategy='mean'):
+        """
+        Ensure that at least 20% of X_train has no missing values. If the number of non-missing rows 
+        is less than 20%, randomly impute missing values to reach at least 20%.
+        
+        Parameters:
+        X_train (pd.DataFrame): Training features.
+        y_train (pd.Series): Training labels.
+        imputation_strategy (str): The strategy for imputing missing values ('mean', 'median', 'most_frequent', 'constant').
+        
+        Returns:
+        pd.DataFrame: X_train with at least 20% non-missing rows.
+        pd.Series: y_train corresponding to the returned X_train.
+        """
+        # Identify indices of rows with no missing values
+        non_missing_indices = X_train.dropna().index
+        total_rows = X_train.shape[0]
+        threshold = 0.2 * total_rows
+
+        # Check if the number of non-missing rows is less than 20% of the total rows
+        if len(non_missing_indices) < threshold:
+            print("Non-missing rows are less than 20% of total data, performing imputation...")
+
+            # Find the number of rows needed to have 20% non-missing
+            rows_needed = int(threshold - len(non_missing_indices))
+            
+            # Randomly select rows to impute to have at least 20% complete cases
+            missing_indices = X_train.index.difference(non_missing_indices)
+            impute_indices = np.random.choice(missing_indices, size=rows_needed, replace=False)
+            
+            # Impute missing values for the selected rows using SimpleImputer
+            imputer = SimpleImputer(strategy=imputation_strategy)
+            X_train_imputed = pd.DataFrame(imputer.fit_transform(X_train.loc[impute_indices]),
+                                        index=impute_indices,
+                                        columns=X_train.columns)
+            
+            # Combine the indices to create a complete subset
+            complete_indices = non_missing_indices.union(impute_indices)
+            
+            # Create the final X_train_complete and y_train_complete
+            X_train_complete = pd.concat([X_train.loc[non_missing_indices], X_train_imputed])
+            y_train_complete = y_train.loc[X_train_complete.index]
+            
+            return X_train_complete, y_train_complete
+        
+        else:
+            # Return the original non-missing subset
+            X_train_complete = X_train.loc[non_missing_indices]
+            y_train_complete = y_train.loc[non_missing_indices]
+            
+            return X_train_complete, y_train_complete
+
+ 
+
+
+
+
+
     def do_kfold_experiments(self, fs_type):
         y_trues = []
         errors_dfs = []
@@ -185,10 +261,10 @@ class FeatureSelectPipeline:
         original_data = scaler.fit_transform(X)
         original_data = pd.DataFrame(original_data, columns=X_cols, index=X_index)
 
-        print(f"\n+++++++++++++++ FEATURE SELECTION Starting k-fold experiments for {self.dataset_name} +++++++++++++++\n")
+        print(f"\n+++++++++++++++ FEATURE SELECTION <{fs_type}> Starting k-fold experiments for {self.dataset_name} +++++++++++++++")
 
         for fold in range(self.n_folds):
-            print(f"Processing fold {fold + 1}/{self.dataset_object.n_folds}")
+            print(f"Processing fold {fold + 1}/{self.dataset_object.n_folds}", end='\r')
 
             self._init_pipelines()
 
@@ -204,94 +280,155 @@ class FeatureSelectPipeline:
             X_val = val.drop(self.dataset_object.target_col, axis=1)
             X_train = train.drop(self.dataset_object.target_col, axis=1)
             X_train = round(X_train, 8)
+            
+            X_train_complete, y_train_complete = self.ensure_20_percent_non_missing(X_train, y_train, imputation_strategy='mean')
 
-            # Identify indices of rows with no missing values
-            non_missing_indices = X_train.dropna().index
+            if fs_type == "RFE":
 
-            # Filter X_train to keep only non-missing rows and convert to NumPy array
-            X_train_complete = X_train.loc[non_missing_indices]
+                #########################
+                # RFE FEATURE SELECTION
 
-            # Filter y_train to keep only corresponding rows
-            y_train_complete = y_train.loc[non_missing_indices]
+                X_train_complete_rfe, selected_features = self.select_features_rfe( X_train_complete, y_train_complete, k=10)
+                # print(selected_features_rfe)
+
+                # # If X_train is a DataFrame and selected_features_gd is an array of column indices
+                # X_train_rfe = X_train.iloc[:, selected_features_rfe]
+                # X_test_rfe = X_test.iloc[:, selected_features_rfe]
+                # train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
+
+                # # Filter self.train_not_missing to include only the selected features
+                # self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_rfe]
+                # self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_rfe]
+
+                # # X_val=X_val, y_val=y_val,
+                # errors_df, proba_predictions_df = self.do_experiment_one_fold(
+                #     X_train=X_train_rfe, y_train=y_train,
+                #     X_val=X_val, y_val=y_val,
+                #     X_test=X_test_rfe, y_test=y_test
+                # )
+
+            elif fs_type == "genetic_algorithm":
+
+
+
+                #########################
+                # Genetic Algorithm FEATURE SELECTION
+
+                selected_features = self.genetic_algorithm_feature_selection(X_train_complete, y_train_complete, k=10, n_gen=20, pop_size=50)
+                # print(selected_features_ga)
+
+                # # If X_train is a DataFrame and selected_features_gd is an array of column indices
+                # X_train_ga = X_train.iloc[:, selected_features_ga]
+                # X_test_ga = X_test.iloc[:, selected_features_ga]
+                # train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
+
+                # # Filter self.train_not_missing to include only the selected features
+                # self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_ga]
+                # self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_ga]
+
+                # # X_val=X_val, y_val=y_val,
+                # errors_df, proba_predictions_df = self.do_experiment_one_fold(
+                #     X_train=X_train_ga, y_train=y_train,
+                #     X_val=X_val, y_val=y_val,
+                #     X_test=X_test_ga, y_test=y_test
+                # )
 
 
             
 
 
-            if fs_type == "information_gain":
-                print("Information Gain Feature Selection")
+            elif fs_type == "information_gain":
 
-                #########################
+
+
                 #########################
                 # INFORMATION GAIN FEATURE SELECTION
-                X_train_complete_ig, selected_features_ig = self.select_features_ig(X_train_complete, y_train_complete, k=10)
+                X_train_complete_ig, selected_features = self.select_features_ig(X_train_complete, y_train_complete, k=10)
+                # print(type(selected_features_ig))
 
-                # If X_train is a DataFrame and selected_features_ig is an array of column indices
-                X_train_ig = X_train.iloc[:, selected_features_ig]
-                X_test_ig = X_test.iloc[:, selected_features_ig]
-                train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
 
-                # Filter self.train_not_missing to include only the selected features
-                self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_ig]
-                self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_ig]
+                # # If X_train is a DataFrame and selected_features_ig is an array of column indices
+                # X_train_ig = X_train.iloc[:, selected_features_ig]
 
-                # X_val=X_val, y_val=y_val,
-                errors_df, proba_predictions_df = self.do_experiment_one_fold(
-                    X_train=X_train_ig, y_train=y_train,
-                    X_val=X_val, y_val=y_val,
-                    X_test=X_test_ig, y_test=y_test
-                )
+                # X_test_ig = X_test.iloc[:, selected_features_ig]
+                # train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
 
-            ##########################
+                # # Filter self.train_not_missing to include only the selected features
+                # self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_ig]
+                # self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_ig]
+
+                # # X_val=X_val, y_val=y_val,
+                # errors_df, proba_predictions_df = self.do_experiment_one_fold(
+                #     X_train=X_train_ig, y_train=y_train,
+                #     X_val=X_val, y_val=y_val,
+                #     X_test=X_test_ig, y_test=y_test
+                # )
+
+
             ##########################
             elif fs_type == "chi_square":
-                print("Chi Square Feature Selection")
+
                 
                 
-                X_train_complete_chi, selected_features_chi = self.select_features_chi2(X_train_complete, y_train_complete, k=10)
+                X_train_complete_chi, selected_features = self.select_features_chi2(X_train_complete, y_train_complete, k=10)
+                # print(selected_features_chi)
 
-                # If X_train is a DataFrame and selected_features_chi is an array of column indices
-                X_train_chi = X_train.iloc[:, selected_features_chi]
-                X_test_chi = X_test.iloc[:, selected_features_chi]
-                train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
+                # # If X_train is a DataFrame and selected_features_chi is an array of column indices
+                # X_train_chi = X_train.iloc[:, selected_features_chi]
+                # X_test_chi = X_test.iloc[:, selected_features_chi]
+                # train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
 
-                # Filter self.train_not_missing to include only the selected features
-                self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_chi]
-                self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_chi]
+                # # Filter self.train_not_missing to include only the selected features
+                # self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_chi]
+                # self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_chi]
 
-                # X_val=X_val, y_val=y_val,
-                errors_df, proba_predictions_df = self.do_experiment_one_fold(
-                    X_train=X_train_chi, y_train=y_train,
-                    X_val=X_val, y_val=y_val,
-                    X_test=X_test_chi, y_test=y_test
-                )
+                # # X_val=X_val, y_val=y_val,
+                # errors_df, proba_predictions_df = self.do_experiment_one_fold(
+                #     X_train=X_train_chi, y_train=y_train,
+                #     X_val=X_val, y_val=y_val,
+                #     X_test=X_test_chi, y_test=y_test
+                # )
 
 
             else:
                 # CORRELATION COEFFICIENT FEATURE SELECTION
-                print("Correlation Coefficient Feature Selection")
-                X_train_complete_corr, selected_features_corr = self.select_features_corr(X_train_complete, y_train_complete, k=10)
-
-                # If X_train is a DataFrame and selected_features_corr is an array of column indices
-                X_train_corr = X_train.loc[:, selected_features_corr]
-                X_test_corr = X_test.loc[:, selected_features_corr]
-                train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
-
-                # Filter self.train_not_missing to include only the selected features
-                self.train_not_missing = original_data.iloc[train_indices].loc[:, selected_features_corr]
-                self.test_not_missing = original_data.iloc[test_indices].loc[:, selected_features_corr]
-
-                # X_val=X_val, y_val=y_val,
-                errors_df, proba_predictions_df = self.do_experiment_one_fold(
-                    X_train=X_train_corr, y_train=y_train,
-                    X_val=X_val, y_val=y_val,
-                    X_test=X_test_corr, y_test=y_test
-                )
+                X_train_complete_corr, selected_features = self.select_features_corr(X_train_complete, y_train_complete, k=10)
 
 
 
+                # print(type(selected_features_corr))
 
+                # # If X_train is a DataFrame and selected_features_corr is an array of column indices
+                # X_train_corr = X_train.loc[:, selected_features_corr]
+                # X_test_corr = X_test.loc[:, selected_features_corr]
+                # train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
 
+                # # Filter self.train_not_missing to include only the selected features
+                # self.train_not_missing = original_data.iloc[train_indices].loc[:, selected_features_corr]
+                # self.test_not_missing = original_data.iloc[test_indices].loc[:, selected_features_corr]
+
+                # # X_val=X_val, y_val=y_val,
+                # errors_df, proba_predictions_df = self.do_experiment_one_fold(
+                #     X_train=X_train_corr, y_train=y_train,
+                #     X_val=X_val, y_val=y_val,
+                #     X_test=X_test_corr, y_test=y_test
+                # )
+
+            # If X_train is a DataFrame and selected_features_corr is an array of column indices
+            X_train_feat = X_train.iloc[:, selected_features]
+            X_test_feat = X_test.iloc[:, selected_features]
+            train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
+
+            # Filter self.train_not_missing to include only the selected features
+            self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features]
+            self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features]
+
+            # X_val=X_val, y_val=y_val,
+            errors_df, proba_predictions_df = self.do_experiment_one_fold(
+                X_train=X_train_feat, y_train=y_train,
+                X_val=X_val, y_val=y_val,
+                X_test=X_test_feat, y_test=y_test
+            )
 
 
             errors_dfs.append(errors_df)
@@ -300,7 +437,7 @@ class FeatureSelectPipeline:
         self.errors_df_total = pd.concat(errors_dfs)
         self.proba_predictions_df_total = pd.concat(proba_predictions_dfs)
 
-        print("\n+++++++++++++++ FEATURE SELECTION Completed k-fold experiments  +++++++++++++++")
+
 
         # self.errors_df_total, self.proba_predictions_df_total
         
@@ -345,8 +482,6 @@ class FeatureSelectPipeline:
             f'f1_score_{self.p_miss}': f1_score(single_label_y_test, predictions)
         }
         self.metric_name_cols = list(metrics.keys())
-        
-        
 
         return errors_df, pd.DataFrame(proba_predictions_per_pipeline)
 
@@ -487,10 +622,6 @@ class FeatureSelectPipeline:
         # prediction_metrics_filename_df = {}
         # imputed_evals_filename_df={}
 
-
-
-
-
         for m in self.prediction_metrics:
             # print("-----------------THIS IS M-----------------")
             # print(m)
@@ -569,65 +700,101 @@ class FeatureSelectPipeline:
         imputation_df.to_csv(os.path.join(self.results_dir, 'imputation_evaluation.csv'), index=False)
         classification_df.to_csv(os.path.join(self.results_dir, 'classification_evaluation.csv'), index=False)
 
-
-
-
-
-
-
-
-
-
-
-         
-
     def select_features_ig(self, X, y, k=10):
         ig_selector = SelectKBest(mutual_info_classif, k=k)
         X_new = ig_selector.fit_transform(X, y)
         return X_new, ig_selector.get_support(indices=True)
 
+    # def select_features_corr(self, X, y, k=10):
+    #     corr = X.corrwith(y)
+    #     top_features = corr.abs().sort_values(ascending=False).head(k).index
+    #     return X[top_features], top_features
+
     def select_features_corr(self, X, y, k=10):
+        """
+        Selects top k features based on correlation with the target variable y.
+        
+        Parameters:
+        X (pd.DataFrame): The input features.
+        y (pd.Series): The target variable.
+        k (int): The number of top features to select.
+        
+        Returns:
+        pd.DataFrame: The subset of X containing only the top k features.
+        np.ndarray: The integer indices of the selected top k features.
+        """
+
         corr = X.corrwith(y)
         top_features = corr.abs().sort_values(ascending=False).head(k).index
-        return X[top_features], top_features
+        top_feature_indices = X.columns.get_indexer(top_features)
+        return X[top_features], top_feature_indices
+
 
     def select_features_chi2(self, X, y, k=10):
         chi2_selector = SelectKBest(chi2, k=k)
         X_new = chi2_selector.fit_transform(X, y)
         return X_new, chi2_selector.get_support(indices=True)
     
-
-
     def genetic_algorithm_feature_selection(self, X, y, k=10, n_gen=20, pop_size=50):
-        def evaluate(individual):
-            selected_features = [idx for idx, val in enumerate(individual) if val == 1]
-            if len(selected_features) == 0:
-                return 0,
-            X_selected = X[:, selected_features]
-            clf = LogisticRegression(solver='liblinear')
-            scores = cross_val_score(clf, X_selected, y, cv=5)
-            return scores.mean(),
-        
-        n_features = X.shape[1]
-        creator.create("FitnessMax", base.Fitness, weights=(1.0,))
-        creator.create("Individual", list, fitness=creator.FitnessMax)
 
-        toolbox = base.Toolbox()
-        toolbox.register("attr_bool", random.randint, 0, 1)
-        toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_bool, n=n_features)
-        toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+        X = X.to_numpy()
+        y = y.to_numpy()
+        clf = SVC(gamma='auto')
+
+        evolved_estimator = GAFeatureSelectionCV(
+            estimator=clf,
+            cv=3,
+            scoring="accuracy",
+            population_size=5,
+            generations=20,
+            n_jobs=-1,
+            verbose=False,
+            keep_top_k=2,
+            elitism=True,
+        )
+
+        evolved_estimator.fit(X, y)
+        features = evolved_estimator.get_support(indices=True)
+
+
+        return features
+
+
+
+
+
+
+    # def genetic_algorithm_feature_selection(self, X, y, k=10, n_gen=20, pop_size=50):
+    #     def evaluate(individual):
+    #         selected_features = [idx for idx, val in enumerate(individual) if val == 1]
+    #         if len(selected_features) == 0:
+    #             return 0,
+    #         X_selected = X[:, selected_features]
+    #         clf = LogisticRegression(solver='liblinear')
+    #         scores = cross_val_score(clf, X_selected, y, cv=5)
+    #         return scores.mean(),
         
-        toolbox.register("evaluate", evaluate)
-        toolbox.register("mate", tools.cxTwoPoint)
-        toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
-        toolbox.register("select", tools.selTournament, tournsize=3)
+    #     n_features = X.shape[1]
+    #     creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+    #     creator.create("Individual", list, fitness=creator.FitnessMax)
+
+    #     toolbox = base.Toolbox()
+    #     toolbox.register("attr_bool", random.randint, 0, 1)
+    #     toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_bool, n=n_features)
+    #     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
         
-        population = toolbox.population(n=pop_size)
-        algorithms.eaSimple(population, toolbox, cxpb=0.5, mutpb=0.2, ngen=n_gen, verbose=False)
+    #     toolbox.register("evaluate", evaluate)
+    #     toolbox.register("mate", tools.cxTwoPoint)
+    #     toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
+    #     toolbox.register("select", tools.selTournament, tournsize=3)
         
-        top_individual = tools.selBest(population, 1)[0]
-        selected_features = [idx for idx, val in enumerate(top_individual) if val == 1]
-        return X[:, selected_features], selected_features
+    #     population = toolbox.population(n=pop_size)
+    #     #broken line
+    #     algorithms.eaSimple(population, toolbox, cxpb=0.5, mutpb=0.2, ngen=n_gen, verbose=False)
+        
+    #     top_individual = tools.selBest(population, 1)[0]
+    #     selected_features = [idx for idx, val in enumerate(top_individual) if val == 1]
+    #     return X[:, selected_features], selected_features
     
 
 
