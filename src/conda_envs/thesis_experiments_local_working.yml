@@ -1,0 +1,17 @@
+name: thesis_experiments
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10.14
+  - imbalanced-learn
+  - pandas
+  - seaborn=0.9.0
+  - matplotlib=3.5
+  - torchvision
+  - pytorch
+  - tqdm
+  - py-xgboost
+  - lightgbm
+  - deap
+prefix: /opt/anaconda3/envs/thesis_experiments
