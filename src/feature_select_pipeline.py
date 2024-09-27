@@ -49,6 +49,10 @@ from sklearn.datasets import load_iris
 from sklearn.metrics import accuracy_score
 import numpy as np
 
+from sklearn.feature_selection import RFECV
+from sklearn.svm import SVC
+from sklearn.model_selection import StratifiedKFold
+
 
 
 class FeatureSelectPipeline:
@@ -207,7 +211,7 @@ class FeatureSelectPipeline:
 
         # Check if the number of non-missing rows is less than 20% of the total rows
         if len(non_missing_indices) < threshold:
-            print("Non-missing rows are less than 20% of total data, performing imputation...")
+            
 
             # Find the number of rows needed to have 20% non-missing
             rows_needed = int(threshold - len(non_missing_indices))
@@ -248,7 +252,8 @@ class FeatureSelectPipeline:
         y_trues = []
         errors_dfs = []
         proba_predictions_dfs = []
-        distances_dfs = []
+        selected_features_dfs = []
+
 
         # Raw data is the original data from MissDataset
         original_data = self.dataset_object.raw_data
@@ -263,10 +268,57 @@ class FeatureSelectPipeline:
 
         print(f"\n+++++++++++++++ FEATURE SELECTION <{fs_type}> Starting k-fold experiments for {self.dataset_name} +++++++++++++++")
 
+        self._init_pipelines()
+
+        train, val, test = self.dataset_object[1]
+
+        y_test = test[self.dataset_object.target_col]
+        y_trues += list(y_test)
+
+        y_train = train[self.dataset_object.target_col]
+        y_val = val[self.dataset_object.target_col]
+
+        X_test = test.drop(self.dataset_object.target_col, axis=1)
+        X_val = val.drop(self.dataset_object.target_col, axis=1)
+        X_train = train.drop(self.dataset_object.target_col, axis=1)
+        X_train = round(X_train, 8)
+        
+        X_train_complete, y_train_complete = self.ensure_20_percent_non_missing(X_train, y_train, imputation_strategy='mean')
+
+        if fs_type == "RFE":
+
+            # RFE FEATURE SELECTION
+            X_train_complete_rfe, selected_features = self.select_features_rfe(X_train_complete, y_train_complete, cv=3)
+
+
+        elif fs_type == "genetic_algorithm":
+
+            # Genetic Algorithm FEATURE SELECTION
+            selected_features = self.genetic_algorithm_feature_selection(X_train_complete, y_train_complete, k=10, n_gen=20, pop_size=50)
+
+
+        elif fs_type == "information_gain":
+
+            # INFORMATION GAIN FEATURE SELECTION
+            X_train_complete_ig, selected_features = self.select_features_ig(X_train_complete, y_train_complete, percent=80)
+
+
+        elif fs_type == "chi_square":
+
+            # CHI SQUARE FEATURE SELECTION
+            X_train_complete_chi, selected_features = self.select_features_chi2(X_train_complete, y_train_complete)
+
+
+        else:
+
+            # CORRELATION COEFFICIENT FEATURE SELECTION
+            X_train_complete_corr, selected_features = self.select_features_corr(X_train_complete, threshold=0.85)
+
+
         for fold in range(self.n_folds):
             print(f"Processing fold {fold + 1}/{self.dataset_object.n_folds}", end='\r')
 
-            self._init_pipelines()
+            # self._init_pipelines()
 
             train, val, test = self.dataset_object[fold]
 
@@ -281,139 +333,6 @@ class FeatureSelectPipeline:
             X_train = train.drop(self.dataset_object.target_col, axis=1)
             X_train = round(X_train, 8)
             
-            X_train_complete, y_train_complete = self.ensure_20_percent_non_missing(X_train, y_train, imputation_strategy='mean')
-
-            if fs_type == "RFE":
-
-                #########################
-                # RFE FEATURE SELECTION
-
-                X_train_complete_rfe, selected_features = self.select_features_rfe( X_train_complete, y_train_complete, k=10)
-                # print(selected_features_rfe)
-
-                # # If X_train is a DataFrame and selected_features_gd is an array of column indices
-                # X_train_rfe = X_train.iloc[:, selected_features_rfe]
-                # X_test_rfe = X_test.iloc[:, selected_features_rfe]
-                # train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
-
-                # # Filter self.train_not_missing to include only the selected features
-                # self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_rfe]
-                # self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_rfe]
-
-                # # X_val=X_val, y_val=y_val,
-                # errors_df, proba_predictions_df = self.do_experiment_one_fold(
-                #     X_train=X_train_rfe, y_train=y_train,
-                #     X_val=X_val, y_val=y_val,
-                #     X_test=X_test_rfe, y_test=y_test
-                # )
-
-            elif fs_type == "genetic_algorithm":
-
-
-
-                #########################
-                # Genetic Algorithm FEATURE SELECTION
-
-                selected_features = self.genetic_algorithm_feature_selection(X_train_complete, y_train_complete, k=10, n_gen=20, pop_size=50)
-                # print(selected_features_ga)
-
-                # # If X_train is a DataFrame and selected_features_gd is an array of column indices
-                # X_train_ga = X_train.iloc[:, selected_features_ga]
-                # X_test_ga = X_test.iloc[:, selected_features_ga]
-                # train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
-
-                # # Filter self.train_not_missing to include only the selected features
-                # self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_ga]
-                # self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_ga]
-
-                # # X_val=X_val, y_val=y_val,
-                # errors_df, proba_predictions_df = self.do_experiment_one_fold(
-                #     X_train=X_train_ga, y_train=y_train,
-                #     X_val=X_val, y_val=y_val,
-                #     X_test=X_test_ga, y_test=y_test
-                # )
-
-
-            
-
-
-            elif fs_type == "information_gain":
-
-
-
-                #########################
-                # INFORMATION GAIN FEATURE SELECTION
-                X_train_complete_ig, selected_features = self.select_features_ig(X_train_complete, y_train_complete, k=10)
-                # print(type(selected_features_ig))
-
-
-                # # If X_train is a DataFrame and selected_features_ig is an array of column indices
-                # X_train_ig = X_train.iloc[:, selected_features_ig]
-
-                # X_test_ig = X_test.iloc[:, selected_features_ig]
-                # train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
-
-                # # Filter self.train_not_missing to include only the selected features
-                # self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_ig]
-                # self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_ig]
-
-                # # X_val=X_val, y_val=y_val,
-                # errors_df, proba_predictions_df = self.do_experiment_one_fold(
-                #     X_train=X_train_ig, y_train=y_train,
-                #     X_val=X_val, y_val=y_val,
-                #     X_test=X_test_ig, y_test=y_test
-                # )
-
-
-            ##########################
-            elif fs_type == "chi_square":
-
-                
-                
-                X_train_complete_chi, selected_features = self.select_features_chi2(X_train_complete, y_train_complete, k=10)
-                # print(selected_features_chi)
-
-                # # If X_train is a DataFrame and selected_features_chi is an array of column indices
-                # X_train_chi = X_train.iloc[:, selected_features_chi]
-                # X_test_chi = X_test.iloc[:, selected_features_chi]
-                # train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
-
-                # # Filter self.train_not_missing to include only the selected features
-                # self.train_not_missing = original_data.iloc[train_indices].iloc[:, selected_features_chi]
-                # self.test_not_missing = original_data.iloc[test_indices].iloc[:, selected_features_chi]
-
-                # # X_val=X_val, y_val=y_val,
-                # errors_df, proba_predictions_df = self.do_experiment_one_fold(
-                #     X_train=X_train_chi, y_train=y_train,
-                #     X_val=X_val, y_val=y_val,
-                #     X_test=X_test_chi, y_test=y_test
-                # )
-
-
-            else:
-                # CORRELATION COEFFICIENT FEATURE SELECTION
-                X_train_complete_corr, selected_features = self.select_features_corr(X_train_complete, y_train_complete, k=10)
-
-
-
-                # print(type(selected_features_corr))
-
-                # # If X_train is a DataFrame and selected_features_corr is an array of column indices
-                # X_train_corr = X_train.loc[:, selected_features_corr]
-                # X_test_corr = X_test.loc[:, selected_features_corr]
-                # train_indices, val_indices, test_indices = self.dataset_object.train_val_test_triples[fold]
-
-                # # Filter self.train_not_missing to include only the selected features
-                # self.train_not_missing = original_data.iloc[train_indices].loc[:, selected_features_corr]
-                # self.test_not_missing = original_data.iloc[test_indices].loc[:, selected_features_corr]
-
-                # # X_val=X_val, y_val=y_val,
-                # errors_df, proba_predictions_df = self.do_experiment_one_fold(
-                #     X_train=X_train_corr, y_train=y_train,
-                #     X_val=X_val, y_val=y_val,
-                #     X_test=X_test_corr, y_test=y_test
-                # )
-
             # If X_train is a DataFrame and selected_features_corr is an array of column indices
             X_train_feat = X_train.iloc[:, selected_features]
             X_test_feat = X_test.iloc[:, selected_features]
@@ -430,21 +349,23 @@ class FeatureSelectPipeline:
                 X_test=X_test_feat, y_test=y_test
             )
 
-
             errors_dfs.append(errors_df)
             proba_predictions_dfs.append(proba_predictions_df)
 
+        # Convert selected_features to a DataFrame
+        selected_features_df = pd.DataFrame(selected_features)
+        selected_features_dfs.append(selected_features_df)
+
         self.errors_df_total = pd.concat(errors_dfs)
         self.proba_predictions_df_total = pd.concat(proba_predictions_dfs)
-
-
+        self.selected_features_total=pd.concat(selected_features_dfs)
 
         # self.errors_df_total, self.proba_predictions_df_total
         
 
     def do_experiment_one_fold(self, X_train, y_train, X_val, y_val, X_test, y_test):
         # print(f"Running experiments for one fold...")
-        self._init_pipelines()
+        # self._init_pipelines()
         proba_predictions_per_pipeline = {}
         errors_df = pd.DataFrame({})
         y_train = np.array(y_train)
@@ -647,7 +568,7 @@ class FeatureSelectPipeline:
                 mean_value = np.mean(values)  # Ensure this is a scalar
                 imputed_evals_df.loc[metric,pipeline_name] = mean_value  # Use loc for setting value in potentially new row/column
 
-        return prediction_metrics_df, self.errors_df_total, self.proba_predictions_df_total, imputed_evals_df
+        return prediction_metrics_df, self.errors_df_total, self.proba_predictions_df_total, imputed_evals_df, self.selected_features_total
 
     def prepare_data(self, dataset, target_col):
         X = dataset.drop(columns=[target_col])
@@ -700,40 +621,217 @@ class FeatureSelectPipeline:
         imputation_df.to_csv(os.path.join(self.results_dir, 'imputation_evaluation.csv'), index=False)
         classification_df.to_csv(os.path.join(self.results_dir, 'classification_evaluation.csv'), index=False)
 
-    def select_features_ig(self, X, y, k=10):
-        ig_selector = SelectKBest(mutual_info_classif, k=k)
-        X_new = ig_selector.fit_transform(X, y)
-        return X_new, ig_selector.get_support(indices=True)
+    # def select_features_ig(self, X, y, k=10):
+    #     ig_selector = SelectKBest(mutual_info_classif, k=k)
+    #     X_new = ig_selector.fit_transform(X, y)
+    #     return X_new, ig_selector.get_support(indices=True)
+
+
+
+    def select_features_ig(self,X, y, percent=80):
+        """
+        Selects the top percentage of features based on Information Gain (Mutual Information).
+
+        Parameters:
+        X (pd.DataFrame or np.ndarray): The input features.
+        y (pd.Series or np.ndarray): The target variable (for classification).
+        percent (float): The percentage of features to keep (e.g., 80 for top 80%).
+
+        Returns:
+        pd.DataFrame or np.ndarray: The subset of X containing the top percentage of features.
+        np.ndarray: The indices of the selected features.
+        """
+        
+        X = X.to_numpy()
+        y = y.to_numpy()
+
+        # Step 1: Calculate Information Gain (Mutual Information) for each feature
+        ig_scores = mutual_info_classif(X, y)
+
+        # Step 2: Sort the features by their Information Gain scores in descending order
+        sorted_indices = np.argsort(ig_scores)[::-1]
+
+        # Step 3: Determine how many features to keep (top `percent` of features)
+        num_features_to_keep = int(len(ig_scores) * (percent / 100))
+
+        # Step 4: Select the top `num_features_to_keep` features
+        selected_features = sorted_indices[:num_features_to_keep]
+
+        # Step 5: Return the filtered dataset and indices of the selected features
+        X_new = X[:, selected_features]
+        return X_new, selected_features
+
+
 
     # def select_features_corr(self, X, y, k=10):
     #     corr = X.corrwith(y)
     #     top_features = corr.abs().sort_values(ascending=False).head(k).index
     #     return X[top_features], top_features
 
-    def select_features_corr(self, X, y, k=10):
-        """
-        Selects top k features based on correlation with the target variable y.
+    # def select_features_corr(self, X, y, k=10):
+    #     """
+    #     Selects top k features based on correlation with the target variable y.
         
+    #     Parameters:
+    #     X (pd.DataFrame): The input features.
+    #     y (pd.Series): The target variable.
+    #     k (int): The number of top features to select.
+        
+    #     Returns:
+    #     pd.DataFrame: The subset of X containing only the top k features.
+    #     np.ndarray: The integer indices of the selected top k features.
+    #     """
+
+    #     corr = X.corrwith(y)
+    #     top_features = corr.abs().sort_values(ascending=False).head(k).index
+    #     top_feature_indices = X.columns.get_indexer(top_features)
+    #     return X[top_features], top_feature_indices
+
+    # def select_features_corr(self, X, threshold=0.85):
+    #     """
+    #     Removes features that are highly correlated with each other based on a threshold.
+        
+    #     Parameters:
+    #     X (pd.DataFrame): The input features.
+    #     threshold (float): The correlation threshold above which one of the features will be dropped.
+        
+    #     Returns:
+    #     pd.DataFrame: The subset of X containing features after removing highly correlated features.
+    #     np.ndarray: The integer indices of the selected features.
+    #     """
+
+    #     # Step 1: Calculate the correlation matrix for all features
+    #     corr_matrix = X.corr().abs()
+
+    #     # Step 2: Remove highly correlated features based on the threshold
+    #     to_drop = set()
+    #     for i in range(len(corr_matrix.columns)):
+    #         for j in range(i + 1, len(corr_matrix.columns)):
+    #             if corr_matrix.iloc[i, j] > threshold:
+    #                 # Add one of the features to drop (we arbitrarily drop the second one in the pair)
+    #                 to_drop.add(corr_matrix.columns[j])
+
+    #     # Step 3: Filter out the features to drop
+    #     final_features = [feature for feature in X.columns if feature not in to_drop]
+        
+    #     # Step 4: Get the indices of the final selected features
+    #     final_feature_indices = X.columns.get_indexer(final_features)
+        
+    #     return X[final_features], final_feature_indices
+
+    def select_features_corr(self, X, threshold=0.85, top_percent=80):
+        """
+        Removes features that are highly correlated with each other based on a threshold, 
+        and then selects the top X% of the remaining features based on variance.
+
         Parameters:
         X (pd.DataFrame): The input features.
-        y (pd.Series): The target variable.
-        k (int): The number of top features to select.
-        
+        threshold (float): The correlation threshold above which one of the features will be dropped.
+        top_percent (float): The percentage of top features to keep after removing correlated features.
+
         Returns:
-        pd.DataFrame: The subset of X containing only the top k features.
-        np.ndarray: The integer indices of the selected top k features.
+        pd.DataFrame: The subset of X containing features after removing highly correlated features and selecting the top percentage.
+        np.ndarray: The integer indices of the selected features.
         """
 
-        corr = X.corrwith(y)
-        top_features = corr.abs().sort_values(ascending=False).head(k).index
-        top_feature_indices = X.columns.get_indexer(top_features)
-        return X[top_features], top_feature_indices
+        # Step 1: Calculate the correlation matrix for all features
+        corr_matrix = X.corr().abs()
+
+        # Step 2: Remove highly correlated features based on the threshold
+        to_drop = set()
+        for i in range(len(corr_matrix.columns)):
+            for j in range(i + 1, len(corr_matrix.columns)):
+                if corr_matrix.iloc[i, j] > threshold:
+                    # Add one of the features to drop (we arbitrarily drop the second one in the pair)
+                    to_drop.add(corr_matrix.columns[j])
+
+        # Step 3: Filter out the features to drop
+        final_features = [feature for feature in X.columns if feature not in to_drop]
+
+        # Subset X to only include the remaining features
+        X_filtered = X[final_features]
+
+        # Step 4: Select top `top_percent` of features based on variance (or another criterion)
+        feature_variances = X_filtered.var().sort_values(ascending=False)
+        num_features_to_keep = int(len(feature_variances) * (top_percent / 100))
+
+        # Get the top `num_features_to_keep` based on variance
+        selected_top_features = feature_variances.head(num_features_to_keep).index
+
+        # Step 5: Get the indices of the final selected features
+        final_feature_indices = X.columns.get_indexer(selected_top_features)
+        
+        return X[selected_top_features], final_feature_indices
 
 
-    def select_features_chi2(self, X, y, k=10):
-        chi2_selector = SelectKBest(chi2, k=k)
+
+
+    # def select_features_chi2(self, X, y, k=10):
+    #     chi2_selector = SelectKBest(chi2, k=k)
+    #     X_new = chi2_selector.fit_transform(X, y)
+    #     return X_new, chi2_selector.get_support(indices=True)
+
+
+
+    def select_features_chi2(self, X, y, percent=80):
+        """
+        Selects the top percentage of features based on the chi-squared test.
+
+        Parameters:
+        X (pd.DataFrame or np.ndarray): The input features.
+        y (pd.Series or np.ndarray): The target variable.
+        percent (float): The percentage of top features to keep (default is 80).
+
+        Returns:
+        pd.DataFrame or np.ndarray: The subset of X containing the selected features.
+        np.ndarray: The indices of the selected features.
+        """
+
+        # Step 1: Calculate the number of features to keep (80% of total features)
+        num_features = X.shape[1]  # Number of features in X
+        num_features_to_keep = int(num_features * (percent / 100))
+
+        # Step 2: Use SelectKBest with chi-squared to select the top 80% of features
+        chi2_selector = SelectKBest(chi2, k=num_features_to_keep)
         X_new = chi2_selector.fit_transform(X, y)
-        return X_new, chi2_selector.get_support(indices=True)
+
+        # Step 3: Get the indices of the selected features
+        selected_features = chi2_selector.get_support(indices=True)
+
+        return X_new, selected_features
+
+
+
+    # def select_features_chi2(self, X, y, threshold=0.05):
+    #     """
+    #     Selects features based on the chi-squared test, keeping features whose chi-squared p-values 
+    #     are below a given threshold.
+        
+    #     Parameters:
+    #     X (pd.DataFrame or np.ndarray): The input features.
+    #     y (pd.Series or np.ndarray): The target variable (must be categorical for chi-squared test).
+    #     threshold (float): The p-value threshold below which a feature is considered significant and kept.
+        
+    #     Returns:
+    #     pd.DataFrame or np.ndarray: The subset of X containing only features with chi-squared p-values below the threshold.
+    #     np.ndarray: The integer indices of the selected features.
+    #     """
+
+    #     X = X.to_numpy()
+    #     y = y.to_numpy()
+
+    #     # Step 1: Perform chi-squared test
+    #     chi2_scores, p_values = chi2(X, y)
+    #     print(p_values)
+        
+    #     # Step 2: Select features with p-values below the threshold
+    #     selected_features = np.where(p_values < threshold)[0]
+        
+    #     # Step 3: Return the filtered features and their indices
+    #     X_new = X[:, selected_features]
+    #     print(selected_features)
+    #     return X_new, selected_features
+
     
     def genetic_algorithm_feature_selection(self, X, y, k=10, n_gen=20, pop_size=50):
 
@@ -745,8 +843,8 @@ class FeatureSelectPipeline:
             estimator=clf,
             cv=3,
             scoring="accuracy",
-            population_size=5,
-            generations=20,
+            population_size=pop_size,
+            generations=n_gen,
             n_jobs=-1,
             verbose=False,
             keep_top_k=2,
@@ -799,11 +897,46 @@ class FeatureSelectPipeline:
 
 
 
-    def select_features_rfe(self, X, y, k=10):
-        model = LogisticRegression(solver='liblinear')
-        rfe = RFE(model, n_features_to_select=k)
-        X_new = rfe.fit_transform(X, y)
-        return X_new, rfe.get_support(indices=True)
+    # def select_features_rfe(self, X, y, k=10):
+    #     model = LogisticRegression(solver='liblinear')
+    #     rfe = RFE(model, n_features_to_select=k)
+    #     X_new = rfe.fit_transform(X, y)
+    #     return X_new, rfe.get_support(indices=True)
+
+
+    def select_features_rfe(self, X, y, cv=3):
+        """
+        Automatically selects the best subset of features using Recursive Feature Elimination (RFE)
+        with cross-validation (RFECV) without requiring a fixed number of features to be specified.
+
+        Parameters:
+        X (pd.DataFrame or np.ndarray): Feature matrix.
+        y (pd.Series or np.ndarray): Target variable.
+        cv (int): Number of cross-validation folds (default is 5).
+
+        Returns:
+        pd.DataFrame or np.ndarray: The subset of X containing the selected features.
+        np.ndarray: The indices of the selected features.
+        """
+
+        X = X.to_numpy()
+        y = y.to_numpy()
+
+        # Initialize the SVC model
+        model = SVC(kernel='linear', gamma='auto')
+
+        # Create RFECV object with cross-validation
+        rfecv = RFECV(estimator=model, step=1, cv=StratifiedKFold(cv), scoring='accuracy', n_jobs=-1)
+
+        # Fit the RFECV model to find the optimal number of features
+        rfecv.fit(X, y)
+
+        # Get the features selected by RFECV
+        selected_features = rfecv.get_support(indices=True)
+
+        # Return the transformed dataset (subset of selected features) and the feature indices
+        X_new = X[:, selected_features]
+        return X_new, selected_features
     
     def train_lightgbm(self, X_train, y_train, X_test, y_test):
         lgb_train = lgb.Dataset(X_train, y_train)

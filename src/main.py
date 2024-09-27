@@ -16,7 +16,7 @@ def save_model(model, filename):
         pickle.dump(model, f)
 
 # Running experiment after setting up the parameters for one MISSING MECHANISM. Each missing mechanism is run separately
-def run_custom_experiments(original_data, dataset_name, missing_param_dict, target_col, task_type='classification'):
+def run_custom_experiments(original_data, dataset_name, missing_param_dict, target_col, task_type='classification',n_folds=10):
     name='Experiment_' + str(datetime.now()),
     # Generate the list of all possible combinations of missing parameters
     missing_param_grid = list(product(*tuple(missing_param_dict.values())))
@@ -51,9 +51,11 @@ def run_custom_experiments(original_data, dataset_name, missing_param_dict, targ
     fs_metrics_type_dfs ={}
     # fs_imputation_eval_results = []
     fs_imputation_type_results = {}
+    fs_selected_features_total = {}
     for fs in fs_methods:
         fs_metrics_type_dfs[fs] = []
         fs_imputation_type_results[fs] = []
+        fs_selected_features_total[fs] = []
 
     miss_type = missing_param_dict['missing_mechanism']
     name = miss_type[0] + '_Experiment_' + str(datetime.now()).replace(':', '-').replace(' ', '_')
@@ -70,7 +72,7 @@ def run_custom_experiments(original_data, dataset_name, missing_param_dict, targ
             dataset_object = MissDataset(
                 data=original_data_copy,
                 target_col=target_col,
-                n_folds=5,
+                n_folds=n_folds,
                 **params,
             )
 
@@ -85,20 +87,12 @@ def run_custom_experiments(original_data, dataset_name, missing_param_dict, targ
                 baseline_imputation_eval_results=baseline_imputation_eval_results
             ) 
 
-            # I think ths is trash, to be deleted
-            # fs_metrics_dfs, fs_imputation_eval_results, fs_pipeline_experiment = feature_selection_experiment(
-            #     dataset_object=dataset_object,
-            #     dataset_name=dataset_name,
-            #     params=params,
-            #     name=name,
-            #     i=i,
-            #     fs_metrics_dfs=fs_metrics_dfs,
-            #     fs_imputation_eval_results=fs_imputation_eval_results
-            # )
+
             for fs in fs_methods:
-                fs_metrics_dfs, fs_imputation_eval_results, fs_pipeline_experiment = run_multiple_feature_selection(fs_metrics_type_dfs[fs],fs_imputation_type_results[fs],dataset_object,dataset_name,params,name,i, fs)
+                fs_metrics_dfs, fs_imputation_eval_results, fs_pipeline_experiment, fs_selected_features = run_multiple_feature_selection(fs_metrics_type_dfs[fs],fs_imputation_type_results[fs],dataset_object,dataset_name,params,name,i, fs)
                 fs_metrics_type_dfs[fs]=fs_metrics_dfs
                 fs_imputation_type_results[fs]=fs_imputation_eval_results
+                fs_selected_features_total[fs]=fs_selected_features
             
             ###################
             
@@ -115,19 +109,23 @@ def run_custom_experiments(original_data, dataset_name, missing_param_dict, targ
     for fs in fs_methods:
         single_fs_metrics_dfs=fs_metrics_type_dfs[fs]
         single_fs_imputation_eval_results=fs_imputation_type_results[fs]
+        single_fs_feature_experiment=fs_selected_features_total[fs]
         save_feature_selection_experiment_results(
             fs_metrics_dfs=single_fs_metrics_dfs,
             fs_imputation_eval_results=single_fs_imputation_eval_results,
             fs_pipeline_experiment=fs_pipeline_experiment,
             param_lookup_dict=param_lookup_dict,
-            feature_type=fs
+            feature_type=fs,
+            fs_pipeline_features=single_fs_feature_experiment
+            
+
         )
     ################################
 
 def run_multiple_feature_selection(fs_metrics_dfs,fs_imputation_eval_results,dataset_object,dataset_name,params,name,i, fs):
     # fs_metrics_dfs = []
     # fs_imputation_eval_results = []
-    fs_metrics_dfs, fs_imputation_eval_results, fs_pipeline_experiment = feature_selection_experiment(
+    fs_metrics_dfs, fs_imputation_eval_results, fs_pipeline_experiment, fs_selected_features = feature_selection_experiment(
                 dataset_object=dataset_object,
                 dataset_name=dataset_name,
                 params=params,
@@ -138,7 +136,7 @@ def run_multiple_feature_selection(fs_metrics_dfs,fs_imputation_eval_results,dat
                 feature_type=fs
 
             )
-    return fs_metrics_dfs, fs_imputation_eval_results, fs_pipeline_experiment
+    return fs_metrics_dfs, fs_imputation_eval_results, fs_pipeline_experiment, fs_selected_features
 
 
 def baseline_experiment(dataset_object, dataset_name, params, name, i, baseline_metrics_dfs, baseline_imputation_eval_results):
@@ -185,7 +183,7 @@ def feature_selection_experiment(dataset_object, dataset_name, params, name, i, 
         fs_type=feature_type
     )
     
-    fs_metrics_df, fs_errors_df, fs_preds_df, fs_imputation_eval_df = fs_pipeline_experiment.run()
+    fs_metrics_df, fs_errors_df, fs_preds_df, fs_imputation_eval_df,fs_selected_features = fs_pipeline_experiment.run()
 
     filename = 'combined-missing_param_' + str(i) + '.csv'
     
@@ -206,8 +204,13 @@ def feature_selection_experiment(dataset_object, dataset_name, params, name, i, 
     # Saving predictions
     preds_filename = os.path.join(fs_pipeline_experiment.results_dir, feature_type + '_predictions_' + filename)
     fs_preds_df.to_csv(preds_filename)
+
+    # Saving selected features
+    selected_features_df = pd.DataFrame(fs_selected_features)
+    selected_features_filename = os.path.join(fs_pipeline_experiment.results_dir, feature_type + '_selected_features_' + filename)
+    selected_features_df.to_csv(selected_features_filename)
     
-    return fs_metrics_dfs, fs_imputation_eval_results, fs_pipeline_experiment
+    return fs_metrics_dfs, fs_imputation_eval_results, fs_pipeline_experiment,fs_selected_features
 
 def save_baseline_experiment_results(baseline_metrics_dfs, baseline_imputation_eval_results, baseline_pipeline_experiment, param_lookup_dict):
     # Combining and saving final baseline results
@@ -223,7 +226,7 @@ def save_baseline_experiment_results(baseline_metrics_dfs, baseline_imputation_e
 
     print(baseline_pipeline_experiment.base_dir)
 
-def save_feature_selection_experiment_results(fs_metrics_dfs, fs_imputation_eval_results, fs_pipeline_experiment, param_lookup_dict, feature_type):
+def save_feature_selection_experiment_results(fs_metrics_dfs, fs_imputation_eval_results, fs_pipeline_experiment, param_lookup_dict, feature_type,fs_pipeline_features):
     # Combining and saving final feature selection results
     final_results = pd.concat(fs_metrics_dfs)
     final_results.to_csv(os.path.join(fs_pipeline_experiment.base_dir,feature_type +'_prediction_metrics_final_results.csv'))
@@ -235,6 +238,10 @@ def save_feature_selection_experiment_results(fs_metrics_dfs, fs_imputation_eval
     with open(os.path.join(fs_pipeline_experiment.base_dir, 'params_lookup.json'), 'w') as f:
         f.write(param_lookup_dict_json)
 
+    features_df = pd.DataFrame(fs_pipeline_features)
+    features_df.to_csv(os.path.join(fs_pipeline_experiment.base_dir, feature_type + '_selected_features.csv'), index=False)
+
+
     
 
 
@@ -242,8 +249,8 @@ def save_feature_selection_experiment_results(fs_metrics_dfs, fs_imputation_eval
 CURRENT_SUPPORTED_DATALOADERS = {
     # # 'eeg_eye_state': DataLoadersEnum.prepare_eeg_eye_data,
     # 'Cleveland Heart Disease': DataLoadersEnum.prepare_cleveland_heart_data,
-    'diabetic_retinopathy': DataLoadersEnum.prepare_diabetic_retinopathy_dataset
-    # 'wdbc': DataLoadersEnum.prepare_wdbc_data
+    # 'diabetic_retinopathy': DataLoadersEnum.prepare_diabetic_retinopathy_dataset,
+    'wdbc': DataLoadersEnum.prepare_wdbc_data
    
 }
 
@@ -276,21 +283,23 @@ def run(custom_experiment_data_object, task_type='classification'):
         'q': [None],
     }
 
-    for d in [MAR_PARAM_DICT, MNAR_PARAM_DICT, MCAR_PARAM_DICT]:
+    for d in [MAR_PARAM_DICT,MCAR_PARAM_DICT,MNAR_PARAM_DICT]:
         run_custom_experiments(
             original_data=custom_experiment_data_object.data,
             dataset_name=custom_experiment_data_object.dataset_name,
             missing_param_dict=d,
             target_col=custom_experiment_data_object.target_col,
-            task_type=task_type
+            task_type=task_type,
+            n_folds=10
         )
+
 
 
 
 # Driver Function
 def main():
     
-    total_trials = 10
+    total_trials = 3
     for i in range(0, total_trials):
         for dataset_name, data_preparation_function_object in CURRENT_SUPPORTED_DATALOADERS.items():
             print(f"\nTrial: {i+1}/{total_trials} for Dataset: {dataset_name}")
