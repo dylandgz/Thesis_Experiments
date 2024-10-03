@@ -30,6 +30,7 @@ class BaselinePipeline:
         self,
         dataset_object: MissDataset,
         missing_mechanism='mcar',
+        missing_percentage='0.0',
         pipeline_name='baseline_pipeline',
         dataset_name='',
         name='Experiment_' + str(datetime.now()),
@@ -37,6 +38,8 @@ class BaselinePipeline:
         classifier_pool=None,
         random_state=42
     ):
+        # NEW NEW
+        self.missing_percentage=str(missing_percentage)
         self.dataset_object = dataset_object
         self.p_miss = self.dataset_object.p_miss
         self.n_folds = self.dataset_object.n_folds
@@ -74,6 +77,14 @@ class BaselinePipeline:
         self.results_dir = os.path.join(self.base_dir, 'results')
         if not os.path.exists(self.results_dir):
             os.mkdir(self.results_dir)
+
+
+
+        # NEW NEW
+        # Define the directory specifically for storing per fold results
+        self.per_fold_results_dir = os.path.join(self.base_dir, 'per_fold_results')
+        if not os.path.exists(self.per_fold_results_dir):
+            os.mkdir(self.per_fold_results_dir)
 
         # Initialize a dictionary to store cross-validation results for each fold
         self.cv_results = {
@@ -259,8 +270,8 @@ class BaselinePipeline:
             f'f1_score_{self.p_miss}': f1_score(single_label_y_test, predictions)
         }
         self.metric_name_cols = list(metrics.keys())
-        
-        
+
+
 
         return errors_df, pd.DataFrame(proba_predictions_per_pipeline)
 
@@ -395,13 +406,62 @@ class BaselinePipeline:
     def run(self):
         self.do_kfold_experiments()
 
+
         prediction_metrics_df = pd.DataFrame({})
         imputed_evals_df= pd.DataFrame({})
 
         for m in self.prediction_metrics:
             prediction_metrics_df[m] = np.mean(self.prediction_metrics[m], axis=0)
+        
+
 
         prediction_metrics_df.index = self.metric_name_cols
+
+
+
+
+
+
+        #########
+        # NEW: Saving per-fold metrics to CSV
+        #########
+        metrics_to_save = ['roc_auc', 'accuracy', 'f1_score']  # Specify metrics to save per fold
+        
+        # Path for the directory where the CSV files will be saved
+        per_fold_dir = f"{self.per_fold_results_dir}/baseline_per_fold_missingness_{self.missing_percentage}"
+        
+        # Create the directory if it does not exist
+        if not os.path.exists(per_fold_dir):
+            os.makedirs(per_fold_dir)
+        
+        # Iterate over the fold index and pipelines to save fold-specific metrics
+        for fold_idx in range(len(self.prediction_metrics[list(self.prediction_metrics.keys())[0]])):  # Assuming all metrics have same fold count
+            fold_data = {}  # Dictionary to store each metric for the current fold
+            
+            # Collect metrics for this fold for each pipeline
+            for pipeline in self.prediction_metrics:
+                fold_data[pipeline] = [self.prediction_metrics[pipeline][fold_idx][metric_idx] for metric_idx in range(len(metrics_to_save))]
+            
+            # Convert to DataFrame for saving
+            fold_metrics_df = pd.DataFrame(fold_data, index=[f"{metric}_{self.missing_percentage}" for metric in metrics_to_save])
+            
+            # Save the DataFrame as a CSV file in the specified directory
+            # file_name = f"fold_{fold_idx+1}_per_fold_metrics_.csv"
+            file_name = f"baseline_per_fold_missingness_fold_{fold_idx+1}_metrics.csv"
+            fold_metrics_df.to_csv(f"{per_fold_dir}/{file_name}", index=True)
+            
+        print(f"Fold {fold_idx} metrics saved to {per_fold_dir}/{file_name}")
+
+
+
+
+
+
+
+
+        #########
+
+        
 
         for pipeline_name, evaluations in self.imputed_evals.items():
             pipeline_averages = {}

@@ -141,11 +141,12 @@ def run_multiple_feature_selection(fs_metrics_dfs,fs_imputation_eval_results,dat
 
 def baseline_experiment(dataset_object, dataset_name, params, name, i, baseline_metrics_dfs, baseline_imputation_eval_results):
     # Running Baseline Pipeline
-
+    # NEW NEW
     baseline_pipeline_experiment = BaselinePipeline(
         dataset_object=dataset_object,
         dataset_name=dataset_name,
         missing_mechanism=params['missing_mechanism'],
+        missing_percentage=params['p_miss'],    
         name=name
     )
     baseline_metrics_df, baseline_errors_df, baseline_preds_df, baseline_imputation_eval_df = baseline_pipeline_experiment.run()
@@ -179,6 +180,7 @@ def feature_selection_experiment(dataset_object, dataset_name, params, name, i, 
         dataset_object=dataset_object,
         dataset_name=dataset_name,
         missing_mechanism=params['missing_mechanism'],
+        missing_percentage=params['p_miss'],
         name=name,
         fs_type=feature_type
     )
@@ -250,7 +252,7 @@ CURRENT_SUPPORTED_DATALOADERS = {
     # # 'eeg_eye_state': DataLoadersEnum.prepare_eeg_eye_data,
     # 'Cleveland Heart Disease': DataLoadersEnum.prepare_cleveland_heart_data,
     # 'diabetic_retinopathy': DataLoadersEnum.prepare_diabetic_retinopathy_dataset,
-    'wdbc': DataLoadersEnum.prepare_wdbc_data
+    # 'wdbc': DataLoadersEnum.prepare_wdbc_data
    
 }
 
@@ -299,7 +301,7 @@ def run(custom_experiment_data_object, task_type='classification'):
 # Driver Function
 def main():
     
-    total_trials = 3
+    total_trials = 10
     for i in range(0, total_trials):
         for dataset_name, data_preparation_function_object in CURRENT_SUPPORTED_DATALOADERS.items():
             print(f"\nTrial: {i+1}/{total_trials} for Dataset: {dataset_name}")
