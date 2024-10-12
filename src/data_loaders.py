@@ -760,7 +760,7 @@ class DataLoadersEnum(Enum):
         )
 
     def prepare_cleveland_heart_data(
-        path_to_data: str = '/Users/dylandominguez/StudioProjects/Thesis_Experiments/data/heart_cleveland_upload.csv'
+        path_to_data: str =  '../data/heart_cleveland_upload.csv'
     ) -> CustomExperimentDataObject:
         df = pd.read_csv(path_to_data)
         target_col = 'condition'
@@ -772,7 +772,7 @@ class DataLoadersEnum(Enum):
         )
 
     def prepare_diabetic_retinopathy_dataset(
-        path_to_data: str = '/Users/dylandominguez/StudioProjects/Thesis_Experiments/data/diabetic_retinopathy_dataset.csv'
+        path_to_data: str = '../data/diabetic_retinopathy_dataset.csv'
     ) -> CustomExperimentDataObject:
         df = pd.read_csv(path_to_data, header=None)
         df.columns = [str(c) for c in df.columns]
