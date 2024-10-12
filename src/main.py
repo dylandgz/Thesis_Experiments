@@ -11,6 +11,8 @@ import pandas as pd
 from baseline_pipeline import BaselinePipeline
 from feature_select_pipeline import FeatureSelectPipeline
 
+import concurrent.futures
+
 def save_model(model, filename):
     with open(filename, 'wb') as f:
         pickle.dump(model, f)
@@ -250,7 +252,7 @@ def save_feature_selection_experiment_results(fs_metrics_dfs, fs_imputation_eval
 
 CURRENT_SUPPORTED_DATALOADERS = {
     # # 'eeg_eye_state': DataLoadersEnum.prepare_eeg_eye_data,
-    # 'Cleveland Heart Disease': DataLoadersEnum.prepare_cleveland_heart_data,
+    'Cleveland Heart Disease': DataLoadersEnum.prepare_cleveland_heart_data,
     # 'diabetic_retinopathy': DataLoadersEnum.prepare_diabetic_retinopathy_dataset,
     # 'wdbc': DataLoadersEnum.prepare_wdbc_data
    
@@ -299,13 +301,49 @@ def run(custom_experiment_data_object, task_type='classification'):
 
 
 # Driver Function
-def main():
+# def main():
     
+#     total_trials = 5
+#     for i in range(0, total_trials):
+#         for dataset_name, data_preparation_function_object in CURRENT_SUPPORTED_DATALOADERS.items():
+#             print(f"\nTrial: {i+1}/{total_trials} for Dataset: {dataset_name}")
+#             run(data_preparation_function_object(), task_type='classification')
+
+
+
+############################################
+
+
+def main():
     total_trials = 10
-    for i in range(0, total_trials):
+    tasks = []
+
+    # Collect all tasks to run in parallel
+    for i in range(total_trials):
         for dataset_name, data_preparation_function_object in CURRENT_SUPPORTED_DATALOADERS.items():
-            print(f"\nTrial: {i+1}/{total_trials} for Dataset: {dataset_name}")
-            run(data_preparation_function_object(), task_type='classification')
+            print(f"\nPreparing Task: Trial: {i+1}/{total_trials} for Dataset: {dataset_name}")
+            tasks.append((i, dataset_name, data_preparation_function_object))
+
+    # Run all tasks in parallel using ProcessPoolExecutor
+    with concurrent.futures.ProcessPoolExecutor(max_workers=5) as executor:
+        futures = [
+            executor.submit(run_task, trial, dataset_name, data_preparation_function_object)
+            for trial, dataset_name, data_preparation_function_object in tasks
+        ]
+
+        # Collect results (if necessary)
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                future.result()  # Handle any raised exceptions
+            except Exception as exc:
+                print(f"Task generated an exception: {exc}")
+
+def run_task(trial, dataset_name, data_preparation_function_object):
+    print(f"Running Trial: {trial+1} for Dataset: {dataset_name}")
+    run(data_preparation_function_object(), task_type='classification')
+
+
+############################################
 
 if __name__ == '__main__':
     
